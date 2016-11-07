@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 package scraper
+=======
+package scrape
+>>>>>>> c38b59f1421a599579e1ff7b808c28655add4f01
 
 import (
 	"crypto/md5"
@@ -71,3 +75,36 @@ func fixUrl(u string, addr *url.URL) *url.URL {
 	}
 	return o
 }
+<<<<<<< HEAD
+=======
+
+type Fetcher interface {
+	Fetch(u *url.URL) (*Context, error)
+}
+
+func Fetch(u *url.URL) (*Context, error) {
+	var req *http.Request
+	var res *http.Response
+	var doc *goquery.Document
+	var err error
+	if req, err = http.NewRequest("GET", u.String(), nil); err != nil {
+		return nil, err
+	}
+	if res, err = http.DefaultClient.Do(req); err != nil {
+		return nil, err
+	}
+	if res.StatusCode != 200 {
+		return nil, ErrBadResource
+	}
+	if doc, err = goquery.NewDocumentFromResponse(res); err != nil {
+		return nil, err
+	}
+	return &Context{
+		Doc:   doc,
+		Addr:  u,
+		Req:   req,
+		Res:   res,
+		links: make(map[string]*url.URL),
+	}, nil
+}
+>>>>>>> c38b59f1421a599579e1ff7b808c28655add4f01
