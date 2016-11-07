@@ -119,6 +119,11 @@ func (s *Scrape) StopAndClose() {
 	s.Close()
 }
 
+func (s *Scrape) StartAndWait() {
+	s.Start()
+	s.Block()
+}
+
 func (s *Scrape) Block() {
 	<-s.done
 }

@@ -32,7 +32,6 @@ func main() {
 			}
 		}
 	}()
-	s.Start()
-	s.Block()
+	s.StartAndWait()
 	log.Println("Stop")
 }
