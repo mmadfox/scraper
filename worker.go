@@ -1,24 +1,14 @@
-<<<<<<< HEAD
 package scraper
 
 import (
+	"github.com/PuerkitoBio/goquery"
 	"github.com/gorilla/mux"
-=======
-package scrape
-
-import (
-	"github.com/gorilla/mux"
-	"log"
->>>>>>> c38b59f1421a599579e1ff7b808c28655add4f01
 	"net/url"
 	"time"
 )
 
-<<<<<<< HEAD
 type WorkerCount int
 
-=======
->>>>>>> c38b59f1421a599579e1ff7b808c28655add4f01
 type Job struct {
 	Payload *url.URL
 	id      string
@@ -38,7 +28,6 @@ type Worker struct {
 	JobChannel chan Job
 	router     *mux.Router
 	quit       chan bool
-<<<<<<< HEAD
 	fetch      Fetcher
 	pause      chan time.Duration
 }
@@ -51,29 +40,14 @@ func newWorker(o workerOptions) Worker {
 		pause:      make(chan time.Duration),
 		router:     o.Router,
 		fetch:      o.Fetcher,
-=======
-	pause      chan time.Duration
-}
-
-func NewWorker(workerPool chan chan Job, queue chan<- Job, r *mux.Router, name string) Worker {
-	return Worker{
-		Name:       name,
-		WorkerPool: workerPool,
-		queue:      queue,
-		pause:      make(chan time.Duration),
-		router:     r,
->>>>>>> c38b59f1421a599579e1ff7b808c28655add4f01
 		JobChannel: make(chan Job),
 		quit:       make(chan bool)}
 }
 
-<<<<<<< HEAD
 func (w Worker) SetFetcher(fn Fetcher) {
 	w.fetch = fn
 }
 
-=======
->>>>>>> c38b59f1421a599579e1ff7b808c28655add4f01
 func (w Worker) Pause(d time.Duration) {
 	go func() {
 		w.pause <- d
@@ -87,26 +61,27 @@ func (w Worker) Start() {
 
 			select {
 			case dur := <-w.pause:
-<<<<<<< HEAD
 				time.Sleep(dur)
 			case job := <-w.JobChannel:
 				if job.Payload != nil {
-					html, err := w.fetch.Fetch(job.Payload)
+					resp, req, err := w.fetch.Fetch(job.Payload)
 					if err == nil {
+						ctx := &Context{
+							Addr:  job.Payload,
+							Res:   resp,
+							Req:   req,
+							links: make(map[string]*url.URL, 0),
+						}
+
+						doc, err := goquery.NewDocumentFromResponse(resp)
+						if err == nil {
+							ctx.Doc = doc
+							w.router.ServeHTTP(ctx, req)
+							for _, link := range ctx.Links() {
+								w.queue <- Job{Payload: link}
+							}
+						}
 					}
-=======
-				log.Println("pause")
-				time.Sleep(dur)
-			case job := <-w.JobChannel:
-				ctx, err := Fetch(job.Payload)
-				if err != nil {
-					log.Println(err)
-				} else {
-					for _, l := range ctx.Links() {
-						w.queue <- Job{Payload: l}
-					}
-					w.router.ServeHTTP(ctx, ctx.Req)
->>>>>>> c38b59f1421a599579e1ff7b808c28655add4f01
 				}
 			case <-w.quit:
 				return
@@ -117,10 +92,6 @@ func (w Worker) Start() {
 
 func (w Worker) Stop() {
 	go func() {
-<<<<<<< HEAD
-=======
-		log.Println("Worker stop.", w.Name)
->>>>>>> c38b59f1421a599579e1ff7b808c28655add4f01
 		w.quit <- true
 	}()
 }

@@ -1,8 +1,4 @@
-<<<<<<< HEAD
 package scraper
-=======
-package scrape
->>>>>>> c38b59f1421a599579e1ff7b808c28655add4f01
 
 import (
 	"crypto/md5"
@@ -50,7 +46,10 @@ func (p *Context) Links() map[string]*url.URL {
 	}
 	p.Doc.Find("a[href]").Each(func(i int, s *goquery.Selection) {
 		if val, ok := s.Attr("href"); ok {
-			fu := fixUrl(val, p.Addr)
+			fu, err := fixUrl(val, p.Addr)
+			if err != nil {
+				return
+			}
 			if fu.Host == p.Addr.Host {
 				sUrl := fu.String()
 				id := GetMD5Hash(sUrl)
@@ -63,48 +62,16 @@ func (p *Context) Links() map[string]*url.URL {
 	return p.links
 }
 
-func fixUrl(u string, addr *url.URL) *url.URL {
+func fixUrl(u string, addr *url.URL) (*url.URL, error) {
 	o, err := url.Parse(u)
-	if err == nil {
-		if o.Scheme == "" {
-			o.Scheme = addr.Scheme
-		}
-		if o.Host == "" {
-			o.Host = addr.Host
-		}
-	}
-	return o
-}
-<<<<<<< HEAD
-=======
-
-type Fetcher interface {
-	Fetch(u *url.URL) (*Context, error)
-}
-
-func Fetch(u *url.URL) (*Context, error) {
-	var req *http.Request
-	var res *http.Response
-	var doc *goquery.Document
-	var err error
-	if req, err = http.NewRequest("GET", u.String(), nil); err != nil {
+	if err != nil {
 		return nil, err
 	}
-	if res, err = http.DefaultClient.Do(req); err != nil {
-		return nil, err
+	if o.Scheme == "" {
+		o.Scheme = addr.Scheme
 	}
-	if res.StatusCode != 200 {
-		return nil, ErrBadResource
+	if o.Host == "" {
+		o.Host = addr.Host
 	}
-	if doc, err = goquery.NewDocumentFromResponse(res); err != nil {
-		return nil, err
-	}
-	return &Context{
-		Doc:   doc,
-		Addr:  u,
-		Req:   req,
-		Res:   res,
-		links: make(map[string]*url.URL),
-	}, nil
+	return o, nil
 }
->>>>>>> c38b59f1421a599579e1ff7b808c28655add4f01

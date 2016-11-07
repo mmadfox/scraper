@@ -8,14 +8,16 @@ import (
 
 func main() {
 	log.Println("Imdb scraper")
-	s, err := scraper.New("http://imdb.com", 20)
+	var wc scraper.WorkerCount = 20
+	s, err := scraper.New("http://www.imdb.com/trailers/", wc)
 	if err != nil {
 		panic(err)
 	}
 	p := "/title/tt{id:[0-9]+}/"
 	s.Mux().HandleFunc(p, func(rw http.ResponseWriter, r *http.Request) {
 		ctx := rw.(*scraper.Context)
-		log.Println("Got the url", ctx.Addr.String())
+		title := ctx.Doc.Find("h1[itemprop=name]").Text()
+		log.Println(title)
 	})
 	s.Start()
 	s.Block()

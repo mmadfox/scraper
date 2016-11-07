@@ -2,7 +2,6 @@ package scraper
 
 import (
 	"errors"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"strings"
@@ -18,7 +17,11 @@ type Fetcher interface {
 	SetReferer(string)
 	UserAgent() string
 	Referer() string
-	Fetch(*url.URL) (*Context, error)
+	Fetch(*url.URL) (*http.Response, *http.Request, error)
+}
+
+func IsBadRequest(err error) bool {
+	return err == ErrBadRequest
 }
 
 type DefaultFetcher struct {
@@ -47,11 +50,11 @@ func (f DefaultFetcher) Referer() string {
 	return f.referer
 }
 
-func (f DefaultFetcher) Fetch(u *url.URL) (string, error) {
+func (f DefaultFetcher) Fetch(u *url.URL) (*http.Response, *http.Request, error) {
 	client := &http.Client{}
 	req, err := http.NewRequest("GET", u.String(), nil)
 	if err != nil {
-		return "", err
+		return nil, nil, err
 	}
 	req.Header = f.header
 	if len(f.userAgent) > 0 {
@@ -62,21 +65,13 @@ func (f DefaultFetcher) Fetch(u *url.URL) (string, error) {
 	}
 	res, err := client.Do(req)
 	if err != nil {
-		return "", err
-	}
-	defer res.Body.Close()
-	if !strings.Contains(res.Header.Get("Content-Type"), "text/html") {
-		return "", ErrBadRequest
+		return nil, nil, err
 	}
 	if !strings.Contains(res.Header.Get("Content-Type"), "text/html") {
-		return "", ErrBadRequest
+		return nil, nil, ErrBadRequest
 	}
 	if res.StatusCode != 200 {
-		return "", ErrBadRequest
+		return nil, nil, ErrBadRequest
 	}
-	htmlData, err := ioutil.ReadAll(res.Body)
-	if err != nil {
-		return "", err
-	}
-	return string(htmlData), nil
+	return res, req, nil
 }

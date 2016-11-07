@@ -7,16 +7,13 @@ import (
 )
 
 func TestFetch(t *testing.T) {
-	u, _ := url.Parse("http://imdb.com")
+	u, _ := url.Parse("http://www.apple.com/us/shop/goto/account")
 	f := scraper.DefaultFetcher{}
-	html, err := f.Fetch(u)
+	resp, _, err := f.Fetch(u)
 	if err != nil {
 		t.Error(err)
 	}
-	if len(html) == 0 {
-		t.Errorf("empty reponse")
-	}
-	t.Log(html)
+	t.Log(resp.StatusCode)
 }
 
 func TestBuildReferer(t *testing.T) {

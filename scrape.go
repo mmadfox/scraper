@@ -1,17 +1,10 @@
-<<<<<<< HEAD
 package scraper
-=======
-package scrape
->>>>>>> c38b59f1421a599579e1ff7b808c28655add4f01
 
 import (
 	"fmt"
 	"github.com/gorilla/mux"
 	"github.com/streamrail/concurrent-map"
-<<<<<<< HEAD
 	"net/http"
-=======
->>>>>>> c38b59f1421a599579e1ff7b808c28655add4f01
 	"net/url"
 	"time"
 )
@@ -22,7 +15,6 @@ const (
 	PAUSE_60MIN = time.Minute * 60
 )
 
-<<<<<<< HEAD
 type workerOptions struct {
 	Name    string
 	Pool    chan chan Job
@@ -34,11 +26,6 @@ type workerOptions struct {
 type Scrape struct {
 	r           *mux.Router
 	workerCount WorkerCount
-=======
-type Scrape struct {
-	r           *mux.Router
-	workerCount int
->>>>>>> c38b59f1421a599579e1ff7b808c28655add4f01
 	queue       chan Job
 	workers     []Worker
 	addr        *url.URL
@@ -46,7 +33,6 @@ type Scrape struct {
 	done        chan bool
 	dup         cmap.ConcurrentMap
 	run         bool
-<<<<<<< HEAD
 	Fetcher     Fetcher
 }
 
@@ -60,8 +46,6 @@ func (s *Scrape) SetHeader(h http.Header) {
 
 func (s *Scrape) SetReferer(r string) {
 	s.Fetcher.SetReferer(r)
-=======
->>>>>>> c38b59f1421a599579e1ff7b808c28655add4f01
 }
 
 func (s *Scrape) Mux() *mux.Router {
@@ -93,7 +77,6 @@ func (s *Scrape) Start() *Scrape {
 	if s.run == true {
 		return nil
 	}
-<<<<<<< HEAD
 	//default user agent string
 	if len(s.Fetcher.UserAgent()) == 0 {
 		s.Fetcher.SetUserAgent(RandomUserAgent())
@@ -110,15 +93,7 @@ func (s *Scrape) Start() *Scrape {
 		w.Start()
 		s.workers = append(s.workers, w)
 	}
-=======
-	s.run = true
-	for i := 0; i < s.workerCount; i++ {
-		w := NewWorker(s.pool, s.queue, s.r, fmt.Sprintf("WorkerId: %d", i))
-		w.Start()
-		s.workers = append(s.workers, w)
-	}
 
->>>>>>> c38b59f1421a599579e1ff7b808c28655add4f01
 	go s.dispatch()
 	return s
 }
@@ -142,45 +117,26 @@ func (s *Scrape) Block() {
 	<-s.done
 }
 
-<<<<<<< HEAD
 func New(domain string, wc WorkerCount) (*Scrape, error) {
-=======
-func New(domain string, workerCount int) (*Scrape, error) {
->>>>>>> c38b59f1421a599579e1ff7b808c28655add4f01
 	u, err := url.Parse(domain)
 	if err != nil {
 		return nil, err
 	}
-<<<<<<< HEAD
 	if wc <= 0 {
 		wc = 5
 	}
 	q := make(chan Job)
 	p := make(chan chan Job, wc)
-=======
-	if workerCount <= 0 {
-		workerCount = 5
-	}
-	q := make(chan Job)
-	p := make(chan chan Job, workerCount)
->>>>>>> c38b59f1421a599579e1ff7b808c28655add4f01
 	go func() {
 		q <- Job{Payload: u}
 		return
 	}()
 	return &Scrape{
-<<<<<<< HEAD
 		Fetcher:     DefaultFetcher{},
 		r:           mux.NewRouter(),
 		pool:        p,
 		workerCount: wc,
 		workers:     make([]Worker, wc),
-=======
-		r:           mux.NewRouter(),
-		pool:        p,
-		workerCount: workerCount,
-		workers:     make([]Worker, workerCount),
->>>>>>> c38b59f1421a599579e1ff7b808c28655add4f01
 		queue:       q,
 		dup:         cmap.New(),
 		done:        make(chan bool),
