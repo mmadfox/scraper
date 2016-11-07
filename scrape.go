@@ -10,6 +10,9 @@ import (
 )
 
 const (
+	PAUSE_1MIN  = time.Minute * 1
+	PAUSE_3MIN  = time.Minute * 3
+	PAUSE_6MIN  = time.Minute * 6
 	PAUSE_15MIN = time.Minute * 15
 	PAUSE_30MIN = time.Minute * 30
 	PAUSE_60MIN = time.Minute * 60
@@ -103,14 +106,17 @@ func (s *Scrape) Stop() {
 	for _, w := range s.workers {
 		w.Stop()
 	}
-	close(s.queue)
-	close(s.pool)
 }
 
 func (s *Scrape) Close() {
 	go func() {
 		s.done <- true
 	}()
+}
+
+func (s *Scrape) StopAndClose() {
+	s.Stop()
+	s.Close()
 }
 
 func (s *Scrape) Block() {
