@@ -2,10 +2,11 @@ package main
 
 import (
 	"encoding/json"
-	"github.com/mmadfox/scraper"
 	"log"
 	"net/http"
 	"time"
+
+	"github.com/mmadfox/scraper"
 )
 
 type Movie struct {
@@ -39,14 +40,22 @@ func main() {
 	go func() {
 		for {
 			select {
-			case <-time.After(1 * time.Minute):
-				s.StopAndClose()
+			case <-time.After(30 * time.Second):
+				s.Stop()
 				return
 			}
 		}
 	}()
-	s.StartAndWait()
-	log.Println("Stop")
+	go func() {
+		for {
+			select {
+			case <-time.After(10 * time.Second):
+				s.Pause()
+				return
+			}
+		}
+	}()
+	s.Run()
 	js, _ := json.Marshal(storage)
 	log.Print(string(js))
 }

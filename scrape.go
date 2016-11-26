@@ -2,55 +2,56 @@ package scraper
 
 import (
 	"fmt"
-	"github.com/gorilla/mux"
-	"github.com/streamrail/concurrent-map"
+	"log"
 	"net/http"
 	"net/url"
-	"time"
-)
 
-const (
-	PAUSE_1MIN  = time.Minute * 1
-	PAUSE_3MIN  = time.Minute * 3
-	PAUSE_6MIN  = time.Minute * 6
-	PAUSE_15MIN = time.Minute * 15
-	PAUSE_30MIN = time.Minute * 30
-	PAUSE_60MIN = time.Minute * 60
+	"github.com/gorilla/mux"
+	"github.com/streamrail/concurrent-map"
 )
 
 type workerOptions struct {
+	State   int
 	Name    string
 	Pool    chan chan Job
 	Queue   chan Job
 	Router  *mux.Router
-	Fetcher Fetcher
+	HttpCli Fetcher
 }
 
 type Scrape struct {
 	r           *mux.Router
 	workerCount WorkerCount
 	queue       chan Job
-	workers     []Worker
 	addr        *url.URL
 	pool        chan chan Job
 	done        chan bool
+	workers     []*Worker
 	dup         cmap.ConcurrentMap
 	run         bool
-	Fetcher     Fetcher
+	HttpCli     Fetcher
+	state       int
 }
 
-func (s *Scrape) SetUserAgent(ua string) {
-	s.Fetcher.SetUserAgent(ua)
+// Set the user agent string. By default, random string
+func (s *Scrape) SetUserAgentString(ua string) {
+	s.HttpCli.SetUserAgentString(ua)
 }
 
+// Set HTTP headers
 func (s *Scrape) SetHeader(h http.Header) {
-	s.Fetcher.SetHeader(h)
+	s.HttpCli.SetHeader(h)
 }
 
+// Set HTTP Referer. By default, domain name with scheme, port, etc
 func (s *Scrape) SetReferer(r string) {
-	s.Fetcher.SetReferer(r)
+	s.HttpCli.SetReferer(r)
 }
 
+// See gorillatoolkit.org/pkg/mux for details
+// r := mmadfox.New("http://google.com")
+// r.Mux().Host("{subdomain:[a-z]+}.domain.com").HandlerFunc(fn)
+// r.Mux().Path("/video/{id:[0-9]+}/{article}/").Handler(h)
 func (s *Scrape) Mux() *mux.Router {
 	return s.r
 }
@@ -70,61 +71,77 @@ func (s *Scrape) dispatch() {
 	}
 }
 
-func (s *Scrape) Pause(d time.Duration) {
+// Pause the queue for all workers
+func (s *Scrape) Pause() {
+	s.state = STATE_PAUSE
+	if !s.IsRunning() {
+		return
+	}
 	for _, w := range s.workers {
-		w.Pause(d)
+		w.Pause()
 	}
 }
 
-func (s *Scrape) Start() *Scrape {
-	if s.run == true {
-		return nil
+// Start the queue for all  workers
+func (s *Scrape) Start() {
+	s.state = STATE_START
+	if !s.IsRunning() {
+		return
 	}
-	//default user agent string
-	if len(s.Fetcher.UserAgent()) == 0 {
-		s.Fetcher.SetUserAgent(RandomUserAgent())
+	for _, w := range s.workers {
+		w.Start()
+	}
+}
+
+// Stop the queue for all workers
+func (s *Scrape) Stop() {
+	s.state = STATE_STOP
+	if !s.IsRunning() {
+		return
+	}
+	for _, w := range s.workers {
+		<-w.Stop()
+	}
+	s.done <- true
+}
+
+func (s *Scrape) IsRunning() bool {
+	return s.run == true
+}
+
+func (s *Scrape) Run() {
+	if s.run == true {
+		return
+	}
+
+	log.Printf("Run scraper by domain %s", s.addr.String())
+
+	// default user agent string
+	if len(s.HttpCli.UserAgentString()) == 0 {
+		s.HttpCli.SetUserAgentString(RandomUserAgent())
+	}
+	// default referer
+	if len(s.HttpCli.Referer()) == 0 {
+		s.HttpCli.SetReferer(s.addr.String())
+	}
+	if s.state == 0 {
+		s.state = STATE_START
 	}
 	s.run = true
 	var wc WorkerCount
 	for wc = 0; wc < s.workerCount; wc++ {
 		w := newWorker(workerOptions{
-			Name:    fmt.Sprintf("WorkerId %v", wc),
+			Name:    fmt.Sprintf("ID#%v", wc),
+			State:   s.state,
 			Pool:    s.pool,
 			Queue:   s.queue,
 			Router:  s.r,
-			Fetcher: s.Fetcher})
-		w.Start()
+			HttpCli: s.HttpCli})
 		s.workers = append(s.workers, w)
+		w.Do()
 	}
 
 	go s.dispatch()
-	return s
-}
-
-func (s *Scrape) Stop() {
-	s.run = false
-	for _, w := range s.workers {
-		w.Stop()
-	}
-}
-
-func (s *Scrape) Close() {
-	go func() {
-		s.done <- true
-	}()
-}
-
-func (s *Scrape) StopAndClose() {
-	s.Stop()
-	s.Close()
-}
-
-func (s *Scrape) StartAndWait() {
-	s.Start()
-	s.Block()
-}
-
-func (s *Scrape) Block() {
 	<-s.done
 }
 
@@ -133,7 +150,7 @@ func New(domain string, wc WorkerCount) (*Scrape, error) {
 	if err != nil {
 		return nil, err
 	}
-	if wc <= 0 {
+	if ok := wc.IsValid(); !ok {
 		wc = 5
 	}
 	q := make(chan Job)
@@ -143,12 +160,12 @@ func New(domain string, wc WorkerCount) (*Scrape, error) {
 		return
 	}()
 	return &Scrape{
-		Fetcher:     DefaultFetcher{},
+		HttpCli:     DefaultHttpCli{},
 		r:           mux.NewRouter(),
 		pool:        p,
 		workerCount: wc,
-		workers:     make([]Worker, wc),
 		queue:       q,
+		workers:     make([]*Worker, 0),
 		dup:         cmap.New(),
 		done:        make(chan bool),
 		addr:        u}, nil

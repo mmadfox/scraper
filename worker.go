@@ -1,13 +1,26 @@
 package scraper
 
 import (
+	"log"
+	"net/url"
+	"runtime"
+	"time"
+
 	"github.com/PuerkitoBio/goquery"
 	"github.com/gorilla/mux"
-	"net/url"
-	"time"
+)
+
+const (
+	STATE_START int = iota
+	STATE_STOP
+	STATE_PAUSE
 )
 
 type WorkerCount int
+
+func (w WorkerCount) IsValid() bool {
+	return w > 0 && w < 200
+}
 
 type Job struct {
 	Payload *url.URL
@@ -22,76 +35,120 @@ func (j Job) Id() string {
 }
 
 type Worker struct {
-	Name       string
-	queue      chan<- Job
-	WorkerPool chan chan Job
-	JobChannel chan Job
-	router     *mux.Router
-	quit       chan bool
-	fetch      Fetcher
-	pause      chan time.Duration
+	Name         string
+	queue        chan<- Job
+	WorkerPool   chan chan Job
+	JobChannel   chan Job
+	router       *mux.Router
+	httpcli      Fetcher
+	stopChannel  chan bool
+	stateChannel chan int
+	state        int
 }
 
-func newWorker(o workerOptions) Worker {
-	return Worker{
-		Name:       o.Name,
-		WorkerPool: o.Pool,
-		queue:      o.Queue,
-		pause:      make(chan time.Duration),
-		router:     o.Router,
-		fetch:      o.Fetcher,
-		JobChannel: make(chan Job),
-		quit:       make(chan bool)}
+func newWorker(o workerOptions) *Worker {
+	return &Worker{
+		Name:         o.Name,
+		WorkerPool:   o.Pool,
+		queue:        o.Queue,
+		state:        o.State,
+		stateChannel: make(chan int),
+		router:       o.Router,
+		httpcli:      o.HttpCli,
+		stopChannel:  make(chan bool),
+		JobChannel:   make(chan Job),
+	}
 }
 
-func (w Worker) SetFetcher(fn Fetcher) {
-	w.fetch = fn
+func (w *Worker) SetHttpCli(f Fetcher) {
+	w.httpcli = f
 }
 
-func (w Worker) Pause(d time.Duration) {
+func (w *Worker) Pause() {
 	go func() {
-		w.pause <- d
+		w.stateChannel <- STATE_PAUSE
 	}()
 }
 
-func (w Worker) Start() {
+func (w *Worker) Stop() chan bool {
+	go func() {
+		w.stateChannel <- STATE_STOP
+	}()
+	return w.stopChannel
+}
+
+func (w *Worker) Start() {
+	go func() {
+		w.stateChannel <- STATE_START
+	}()
+}
+
+func (w *Worker) Do() {
+	log.Println("Do worker", w.Name)
+	state := w.state
+
 	go func() {
 		for {
-			w.WorkerPool <- w.JobChannel
 
 			select {
-			case dur := <-w.pause:
-				time.Sleep(dur)
-			case job := <-w.JobChannel:
-				if job.Payload != nil {
-					resp, req, err := w.fetch.Fetch(job.Payload)
-					if err == nil {
-						ctx := &Context{
-							Addr:  job.Payload,
-							Res:   resp,
-							Req:   req,
-							links: make(map[string]*url.URL, 0),
-						}
-
-						doc, err := goquery.NewDocumentFromResponse(resp)
-						if err == nil {
-							ctx.Doc = doc
-							w.router.ServeHTTP(ctx, req)
-							for _, link := range ctx.Links() {
-								w.queue <- Job{Payload: link}
-							}
-						}
-					}
+			case state = <-w.stateChannel:
+				switch state {
+				case STATE_PAUSE:
+					log.Println("State pause")
+				case STATE_STOP:
+					log.Println("State stop")
+				case STATE_START:
+					log.Println("State start")
 				}
-			case <-w.quit:
-				return
+			default:
+				if state == STATE_PAUSE {
+					time.Sleep(time.Millisecond * 250)
+					runtime.Gosched()
+					continue
+				}
+
+				if state == STATE_STOP {
+					log.Printf("Stop worker %s", w.Name)
+					w.stopChannel <- true
+					close(w.stopChannel)
+					return
+				}
+
+				w.WorkerPool <- w.JobChannel
+
+				job, ok := <-w.JobChannel
+
+				if !ok {
+					continue
+				}
+
+				log.Printf("Scan url: %s, worker: %s",
+					job.Payload.String(), w.Name)
+
+				resp, req, err := w.httpcli.Fetch(job.Payload)
+				if err != nil {
+					log.Printf("Error: %v", err)
+					continue
+				}
+
+				ctx := &Context{
+					Addr:  job.Payload,
+					Res:   resp,
+					Req:   req,
+					links: make(map[string]*url.URL, 0),
+				}
+
+				doc, err := goquery.NewDocumentFromResponse(resp)
+				if err != nil {
+					log.Printf("Error: %v")
+					continue
+				}
+				ctx.Doc = doc
+				w.router.ServeHTTP(ctx, req)
+				for _, link := range ctx.Links() {
+					w.queue <- Job{Payload: link}
+				}
 			}
 		}
-	}()
-}
-
-func (w Worker) Stop() {
-	go func() {
-		w.quit <- true
 	}()
 }

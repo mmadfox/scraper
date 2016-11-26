@@ -1,9 +1,11 @@
 package main
 
 import (
-	"github.com/mmadfox/scraper"
 	"log"
 	"net/http"
+	"time"
+
+	"github.com/mmadfox/scraper"
 )
 
 func main() {
@@ -19,6 +21,14 @@ func main() {
 		title := ctx.Doc.Find("h1[itemprop=name]").Text()
 		log.Println(title)
 	})
-	s.Start()
-	s.Block()
+	go func() {
+		for {
+			select {
+			case <-time.After(3 * time.Second):
+				s.Stop()
+				return
+			}
+		}
+	}()
+	s.Run()
 }
