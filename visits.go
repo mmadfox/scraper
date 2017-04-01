@@ -1,6 +1,8 @@
 package scraper
 
 import (
+	"sync"
+
 	cmap "github.com/streamrail/concurrent-map"
 )
 
@@ -8,10 +10,12 @@ type Visiter interface {
 	Visit(string) bool
 	ResetVisit(string) error
 	Drop() error
+	Close() error
 }
 
 type memoryVisits struct {
-	m cmap.ConcurrentMap
+	m     cmap.ConcurrentMap
+	mutex *sync.Mutex
 }
 
 func (v *memoryVisits) Visit(u string) bool {
@@ -24,11 +28,20 @@ func (v *memoryVisits) ResetVisit(u string) error {
 }
 
 func (v *memoryVisits) Drop() error {
+	v.mutex.Lock()
+	defer v.mutex.Unlock()
+
+	v.m = cmap.New()
+	return nil
+}
+
+func (v *memoryVisits) Close() error {
 	return nil
 }
 
 func NewMemoryVisits() Visiter {
 	return &memoryVisits{
-		m: cmap.New(),
+		m:     cmap.New(),
+		mutex: &sync.Mutex{},
 	}
 }
